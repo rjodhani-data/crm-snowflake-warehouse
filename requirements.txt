@@ -1,0 +1,4 @@
+snowflake-connector-python>=3.12
+python-dotenv>=1.0
+duckdb>=1.1
+pytest>=8.0
