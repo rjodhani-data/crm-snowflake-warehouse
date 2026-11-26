@@ -8,6 +8,33 @@ REST API, landing raw data in Snowflake, cleaning and de-duplicating it,
 dimensional modelling, currency conversion, reporting views, and automated data
 quality checks.
 
+## Tech stack
+
+| Area | Tools |
+|---|---|
+| Cloud data warehouse | **Snowflake** (warehouse, internal stage, file formats, `COPY INTO`) |
+| Ingestion | **Python** (CSV extracts, REST API client for FX rates), Snowflake Python connector |
+| Transformation | **SQL**: CTEs, window functions (`QUALIFY ROW_NUMBER()`), `TRY_CAST` typing, views |
+| Modelling | Kimball dimensional model: star schema, MD5 surrogate keys, `YYYYMMDD` date keys |
+| Data quality | SQL checks (uniqueness, referential integrity, reconciliation) that fail the run on errors |
+| Local dev and testing | **DuckDB** (same SQL models run locally), **pytest** end-to-end test |
+| Reporting | BI-ready views for Power BI / Tableau |
+
+## Results
+
+Full run on Snowflake: all six sources loaded, seven mart tables built, every
+error-level check passing. The same SQL run locally on DuckDB produces identical
+row counts.
+
+| Table | Rows |
+|---|---|
+| `fact_opportunity` | 3,000 |
+| `fact_quote_line` | 7,393 |
+| `fact_contract` | 1,053 |
+| `dim_account` / `dim_product` / `dim_sales_rep` / `dim_date` | 500 / 15 / 8 / 2,192 |
+
+![Snowflake reporting view](docs/snowflake-rep-performance.png)
+
 ## Architecture
 
 ```mermaid
@@ -110,3 +137,13 @@ tests/
 - FX rates come from the free [Frankfurter API](https://frankfurter.dev). If the
   API is unreachable, the pipeline falls back to sample rates and marks them
   `source = 'sample'`.
+
+## Author
+
+**Rajvi Jodhani**: data engineer and analyst, M.Sc. Web and Data Science
+(University of Koblenz, Germany). ETL pipelines, SQL data modelling and Power BI /
+Tableau reporting.
+
+[LinkedIn](https://linkedin.com/in/rajvi-jodhani) ·
+[Portfolio](https://rjodhani-data.github.io) ·
+[GitHub](https://github.com/rjodhani-data)

@@ -44,7 +44,7 @@ SELECT
     UPPER(TRIM(currency_iso_code))                     AS currency_code,
     TRIM(lead_source)                                  AS lead_source,
     TRIM(owner_name)                                   AS owner_name,
-    TRY_CAST(TRY_CAST(created_date AS TIMESTAMP) AS DATE) AS created_date,
+    CAST(TRY_CAST(created_date AS TIMESTAMP) AS DATE) AS created_date,
     TRY_CAST(close_date AS DATE)                       AS close_date,
     LOWER(TRIM(is_closed)) = 'true'                    AS is_closed,
     LOWER(TRIM(is_won)) = 'true'                       AS is_won,

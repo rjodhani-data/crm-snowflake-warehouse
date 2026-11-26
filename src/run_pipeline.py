@@ -99,6 +99,9 @@ class SnowflakeTarget:
             f"MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE "
             f"ON_ERROR = ABORT_STATEMENT FORCE = TRUE"
         )
+        # COPY leaves columns missing from the file NULL; stamp the load time
+        cur.execute(f"UPDATE raw.{table} SET _loaded_at = CURRENT_TIMESTAMP "
+                    f"WHERE _loaded_at IS NULL")
         return cur.execute(f"SELECT COUNT(*) FROM raw.{table}").fetchone()[0]
 
 
@@ -154,6 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  marts.{t:18s} {n:6d} rows")
 
     ok = run_quality_checks(target)
+    target.con.close()
     print("\nPipeline", "succeeded" if ok else "FAILED (see errors above)")
     return 0 if ok else 1
 

@@ -25,6 +25,7 @@ CREATE OR REPLACE FILE FORMAT raw.csv_ff
   FIELD_OPTIONALLY_ENCLOSED_BY = '"'
   EMPTY_FIELD_AS_NULL = TRUE
   NULL_IF = ('')
+  ERROR_ON_COLUMN_COUNT_MISMATCH = FALSE  -- tables have an extra _loaded_at column
   TRIM_SPACE = FALSE;        -- keep raw as-is; trimming happens in staging
 
 CREATE STAGE IF NOT EXISTS raw.landing
