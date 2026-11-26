@@ -17,6 +17,11 @@ USE WAREHOUSE CRM_WH;
 CREATE SCHEMA IF NOT EXISTS raw;       -- landed as-is, all VARCHAR
 CREATE SCHEMA IF NOT EXISTS staging;   -- typed, cleaned, de-duplicated views
 CREATE SCHEMA IF NOT EXISTS marts;     -- star schema + reporting views
+CREATE SCHEMA IF NOT EXISTS orchestration;  -- Snowflake Tasks DAG, DQ log
+
+-- SQL model files are uploaded here so tasks can run them
+CREATE STAGE IF NOT EXISTS orchestration.sql_repo
+  COMMENT = 'SQL files executed by the task DAG';
 
 -- CSV format that reads the header row so COPY can match columns by name
 CREATE OR REPLACE FILE FORMAT raw.csv_ff

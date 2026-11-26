@@ -64,6 +64,9 @@ class DuckDBTarget:
         )
         return self.con.execute(f"SELECT COUNT(*) FROM raw.{table}").fetchone()[0]
 
+    def load_all(self, tables: list[str]) -> dict[str, int]:
+        return {t: self.load_csv(t, RAW_DIR / f"{t}.csv") for t in tables}
+
 
 class SnowflakeTarget:
     name = "snowflake"
@@ -88,21 +91,18 @@ class SnowflakeTarget:
     def query(self, sql: str) -> list[tuple]:
         return self.con.cursor().execute(sql).fetchall()
 
-    def load_csv(self, table: str, csv_path: Path) -> int:
-        cur = self.con.cursor()
-        cur.execute(f"TRUNCATE TABLE raw.{table}")
-        cur.execute(f"PUT 'file://{csv_path.as_posix()}' @raw.landing/{table}/ "
-                    f"AUTO_COMPRESS = TRUE OVERWRITE = TRUE")
-        cur.execute(
-            f"COPY INTO raw.{table} FROM @raw.landing/{table}/ "
-            f"FILE_FORMAT = (FORMAT_NAME = raw.csv_ff) "
-            f"MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE "
-            f"ON_ERROR = ABORT_STATEMENT FORCE = TRUE"
-        )
-        # COPY leaves columns missing from the file NULL; stamp the load time
-        cur.execute(f"UPDATE raw.{table} SET _loaded_at = CURRENT_TIMESTAMP "
-                    f"WHERE _loaded_at IS NULL")
-        return cur.execute(f"SELECT COUNT(*) FROM raw.{table}").fetchone()[0]
+    def upload(self, local: Path, stage_path: str, compress: bool = True) -> None:
+        self.con.cursor().execute(
+            f"PUT 'file://{local.as_posix()}' @{stage_path} "
+            f"AUTO_COMPRESS = {str(compress).upper()} OVERWRITE = TRUE")
+
+    def load_all(self, tables: list[str]) -> dict[str, int]:
+        # Upload each extract to the landing stage, then reload raw with the
+        # same SQL file the t1_load_raw task uses
+        for t in tables:
+            self.upload(RAW_DIR / f"{t}.csv", f"raw.landing/{t}/")
+        self.run_sql(sql_file("load_raw", self.name).read_text())
+        return {t: self.query(f"SELECT COUNT(*) FROM raw.{t}")[0][0] for t in tables}
 
 
 # --------------------------------------------------------------------------
@@ -141,8 +141,7 @@ def main(argv: list[str] | None = None) -> int:
     for step in MODEL_STEPS:
         if step is None:
             print("  load raw")
-            for t in TABLES:
-                n = target.load_csv(t, RAW_DIR / f"{t}.csv")
+            for t, n in target.load_all(TABLES).items():
                 print(f"    raw.{t:14s} {n:6d} rows")
             continue
         f = sql_file(step, target.name)

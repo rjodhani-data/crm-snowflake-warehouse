@@ -1,7 +1,8 @@
 # CRM & Contracts Data Warehouse on Snowflake
 
 An ELT pipeline that turns Salesforce-style CRM, CPQ and contract data into a
-**Snowflake star schema** for sales and renewals reporting in Power BI / Tableau.
+**Snowflake star schema** for sales and renewals reporting in Power BI / Tableau,
+orchestrated inside Snowflake as a scheduled **Snowflake Tasks DAG**.
 
 It covers the full path a data engineering team owns: extracting from files and a
 REST API, landing raw data in Snowflake, cleaning and de-duplicating it,
@@ -13,6 +14,7 @@ quality checks.
 | Area | Tools |
 |---|---|
 | Cloud data warehouse | **Snowflake** (warehouse, internal stage, file formats, `COPY INTO`) |
+| Orchestration | **Snowflake Tasks** DAG (7 tasks, parallel branches, daily CRON schedule), Snowflake Scripting, `EXECUTE IMMEDIATE FROM` stage |
 | Ingestion | **Python** (CSV extracts, REST API client for FX rates), Snowflake Python connector |
 | Transformation | **SQL**: CTEs, window functions (`QUALIFY ROW_NUMBER()`), `TRY_CAST` typing, views |
 | Modelling | Kimball dimensional model: star schema, MD5 surrogate keys, `YYYYMMDD` date keys |
@@ -34,6 +36,30 @@ row counts.
 | `dim_account` / `dim_product` / `dim_sales_rep` / `dim_date` | 500 / 15 / 8 / 2,192 |
 
 ![Snowflake reporting view](docs/snowflake-rep-performance.png)
+
+## Orchestration: Snowflake Tasks DAG
+
+```mermaid
+flowchart TD
+    T1[t1_load_raw<br/>daily 07:00 IST] --> T2[t2_staging]
+    T2 --> T3a[t3_dim_date]
+    T2 --> T3b[t3_dimensions]
+    T3a --> T4[t4_facts]
+    T3b --> T4
+    T4 --> T5[t5_reporting_views]
+    T5 --> T6[t6_data_quality]
+```
+
+- Each task runs one file from `sql/` directly from a stage with
+  `EXECUTE IMMEDIATE FROM`, so the SQL files stay the single source of truth.
+- Date and business dimensions build **in parallel**; facts wait for both.
+- `t6_data_quality` (Snowflake Scripting) logs every check to
+  `orchestration.dq_results` and raises an error if any error-level check fails,
+  so a bad load shows up as a failed run in Task History.
+- `src/deploy_tasks.py` uploads the files, creates the DAG, triggers a run and
+  reports each task's result.
+
+![Snowflake task graph](docs/snowflake-task-dag.png)
 
 ## Architecture
 
@@ -105,6 +131,9 @@ python src/run_pipeline.py --target duckdb
 # Snowflake run: copy .env.example to .env and fill in your account
 python src/run_pipeline.py --target snowflake
 
+# Deploy the Snowflake Tasks DAG and run it once
+python src/deploy_tasks.py --run
+
 # Tests
 pytest -q
 ```
@@ -116,6 +145,7 @@ src/
   generate_crm_data.py   Salesforce-style source extracts (CSV)
   extract_fx_rates.py    REST API extract with forward-fill for non-trading days
   run_pipeline.py        extract -> load -> transform -> data quality
+  deploy_tasks.py        deploy + run the Snowflake Tasks DAG
 sql/
   00_setup.*.sql         warehouse, database, schemas, file format, stage
   01_raw_tables.sql      landing tables
@@ -125,6 +155,8 @@ sql/
   05_facts.sql           opportunity, quote line, contract facts
   06_reporting_views.sql BI-ready views
   07_data_quality.sql    checks
+  load_raw.snowflake.sql COPY INTO from the landing stage
+  08_tasks.snowflake.sql Snowflake Tasks DAG
 tests/
   test_pipeline.py       end-to-end test on DuckDB
 ```
